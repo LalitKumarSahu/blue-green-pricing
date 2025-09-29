@@ -107,6 +107,18 @@ npm start
 # or
 npm run dev
 ```
+4.3. Configure environment variables (optional):
+Edit `.env` file to customize settings:
+```env
+# API Configuration
+VITE_API_URL=http://localhost:3001
+
+# Environment
+VITE_ENV=development
+
+# Debug Mode (optional)
+VITE_DEBUG=true
+``````
 
 Frontend will start on `http://localhost:3000`
 
