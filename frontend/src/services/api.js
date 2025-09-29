@@ -2,32 +2,28 @@ import axios from 'axios';
 
 // API Configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-const REQUEST_TIMEOUT = 10000; // 10 seconds
+console.log('[API Config] Base URL:', API_BASE_URL);
 
-// Create axios instance with default configuration
+const REQUEST_TIMEOUT = 10000;
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: REQUEST_TIMEOUT,
-  withCredentials: true, // Enable cookies for sticky sessions
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   }
 });
 
-// Request interceptor for adding custom headers
+// Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
-    // Add timestamp to requests
     config.metadata = { startTime: Date.now() };
+    config.headers['X-Request-ID'] = Date.now().toString(36) + Math.random().toString(36).substr(2);
     
-    // Add request ID for tracking
-    config.headers['X-Request-ID'] = generateRequestId();
-    
-    // Log request in development
-    if (import.meta.env.DEV) {
-      console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
-    }
+    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    console.log('[API Request] Headers:', config.headers);
     
     return config;
   },
@@ -37,23 +33,14 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for handling responses and errors
+// Response interceptor
 apiClient.interceptors.response.use(
   (response) => {
-    // Calculate response time
     const responseTime = Date.now() - response.config.metadata.startTime;
+    console.log(`[API Response] ${response.status} ${response.config.url} (${responseTime}ms)`);
     
-    // Add response time to response data
-    if (response.data) {
-      response.data.responseTime = responseTime;
-    }
-    
-    // Log response in development
-    if (import.meta.env.DEV) {
-      console.log(`[API Response] ${response.status} ${response.config.url} (${responseTime}ms)`);
-      if (response.data?.data?.routing) {
-        console.log(`[API Routing] Version: ${response.data.data.routing.version}, Reason: ${response.data.data.routing.routingReason}`);
-      }
+    if (response.data?.data?.routing) {
+      console.log(`[API Routing] Version: ${response.data.data.routing.version}, Reason: ${response.data.data.routing.routingReason}`);
     }
     
     return response;
@@ -63,17 +50,24 @@ apiClient.interceptors.response.use(
     
     console.error('[API Error]', {
       message: error.message,
+      code: error.code,
       status: error.response?.status,
+      statusText: error.response?.statusText,
       url: error.config?.url,
-      responseTime
+      baseURL: error.config?.baseURL,
+      responseTime: responseTime + 'ms'
     });
     
-    // Transform error for consistent handling
+    // Log response data if available
+    if (error.response?.data) {
+      console.error('[API Error Response]', error.response.data);
+    }
+    
     const transformedError = {
-      message: error.message || 'Network error occurred',
+      message: error.response?.data?.message || error.message || 'Network error occurred',
       status: error.response?.status || 0,
       data: error.response?.data || null,
-      isNetworkError: !error.response,
+      isNetworkError: !error.response || error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK',
       responseTime
     };
     
@@ -81,42 +75,28 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Generate unique request ID
-const generateRequestId = () => {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-};
-
-// API Service class
 class ApiService {
-  
   /**
    * Get pricing data
    * @param {Object} options - Request options
-   * @returns {Promise<Object>} Pricing data
+   * @param {string} options.url - Optional custom URL path (default: '/pricing')
+   * @returns {Promise<Object>} Pricing data with metadata
    */
   async getPricing(options = {}) {
+    const { url = '/pricing', ...restOptions } = options;
+    
     try {
-      const config = {
-        ...options
-      };
+      console.log('[getPricing] Starting request to:', url);
+      const response = await apiClient.get(url, restOptions);
+      console.log('[getPricing] Success:', response.data);
       
-      // Add custom headers if provided
-      if (options.version) {
-        config.headers = {
-          ...config.headers,
-          'X-Version': options.version
-        };
-      }
-      
-      const response = await apiClient.get('/pricing', config);
       return {
         success: true,
         data: response.data.data,
-        meta: response.data.meta,
-        responseTime: response.data.responseTime
+        meta: response.data.meta
       };
     } catch (error) {
-      console.error('Failed to fetch pricing data:', error);
+      console.error('[getPricing] Failed:', error);
       throw {
         success: false,
         error: error.message || 'Failed to fetch pricing data',
@@ -125,111 +105,99 @@ class ApiService {
       };
     }
   }
-  
+
   /**
-   * Get specific version pricing (for testing)
+   * Get specific version pricing
    * @param {string} version - 'blue' or 'green'
-   * @returns {Promise<Object>} Pricing data
+   * @returns {Promise<Object>} Pricing data for specific version
    */
-  async getSpecificVersion(version) {
-    try {
-      const response = await apiClient.get(`/pricing/version/${version}`);
-      return {
-        success: true,
-        data: response.data.data,
-        meta: response.data.meta,
-        responseTime: response.data.responseTime
-      };
-    } catch (error) {
-      console.error(`Failed to fetch ${version} pricing:`, error);
+  async getVersionPricing(version) {
+    if (!version || !['blue', 'green'].includes(version)) {
       throw {
         success: false,
-        error: error.message || `Failed to fetch ${version} pricing`,
-        status: error.status || 500
+        error: 'Invalid version. Must be "blue" or "green"',
+        status: 400
       };
     }
+    
+    return this.getPricing({ url: `/pricing/version/${version}` });
   }
-  
+
   /**
-   * Get API statistics
-   * @returns {Promise<Object>} Statistics data
+   * Get routing statistics
+   * @returns {Promise<Object>} Routing statistics
    */
   async getStats() {
     try {
+      console.log('[getStats] Fetching statistics...');
       const response = await apiClient.get('/pricing/stats');
+      console.log('[getStats] Success:', response.data);
+      
       return {
         success: true,
-        data: response.data.data,
-        meta: response.data.meta
+        data: response.data.data
       };
     } catch (error) {
-      console.error('Failed to fetch stats:', error);
+      console.error('[getStats] Failed:', error);
       throw {
         success: false,
-        error: error.message || 'Failed to fetch statistics'
+        error: error.message || 'Failed to fetch statistics',
+        status: error.status || 500,
+        isNetworkError: error.isNetworkError || false
       };
     }
   }
-  
+
   /**
-   * Get API health status
+   * Get health status
    * @returns {Promise<Object>} Health status
    */
   async getHealth() {
     try {
+      console.log('[getHealth] Checking health...');
       const response = await apiClient.get('/pricing/health');
+      console.log('[getHealth] Success:', response.data);
+      
       return {
         success: true,
-        data: response.data.data,
-        meta: response.data.meta
+        data: response.data
       };
     } catch (error) {
-      console.error('Failed to fetch health status:', error);
+      console.error('[getHealth] Failed:', error);
       throw {
         success: false,
-        error: error.message || 'Failed to fetch health status',
-        status: error.status || 503
+        error: error.message || 'Failed to check health',
+        status: error.status || 500,
+        isNetworkError: error.isNetworkError || false
       };
     }
   }
-  
+
   /**
-   * Reset statistics (admin function)
+   * Reset routing statistics (admin only)
    * @returns {Promise<Object>} Reset confirmation
    */
   async resetStats() {
     try {
+      console.log('[resetStats] Resetting statistics...');
       const response = await apiClient.post('/pricing/reset-stats');
+      console.log('[resetStats] Success:', response.data);
+      
       return {
         success: true,
-        message: response.data.message,
-        meta: response.data.meta
+        data: response.data
       };
     } catch (error) {
-      console.error('Failed to reset stats:', error);
+      console.error('[resetStats] Failed:', error);
       throw {
         success: false,
-        error: error.message || 'Failed to reset statistics'
+        error: error.message || 'Failed to reset statistics',
+        status: error.status || 500,
+        isNetworkError: error.isNetworkError || false
       };
-    }
-  }
-  
-  /**
-   * Test connectivity to API
-   * @returns {Promise<boolean>} Connection status
-   */
-  async testConnection() {
-    try {
-      const response = await apiClient.get('/', { timeout: 5000 });
-      return response.status === 200;
-    } catch (error) {
-      console.warn('API connection test failed:', error.message);
-      return false;
     }
   }
 }
 
-// Create and export singleton instance
 const apiService = new ApiService();
-
 export default apiService;

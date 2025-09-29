@@ -1,55 +1,43 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/api.js';
 
-/**
- * Custom hook for managing pricing data
- * @param {Object} options - Hook options
- * @returns {Object} Hook state and methods
- */
 const usePricing = (options = {}) => {
-  const {
-    autoFetch = true,
-    refreshInterval = null,
-    retryOnError = true,
-    maxRetries = 3
-  } = options;
+  const { autoFetch = true, refreshInterval = null, retryOnError = true, maxRetries = 3 } = options;
 
-  // State management
   const [state, setState] = useState({
     data: null,
     loading: true,
     error: null,
     version: null,
-    lastFetch: null,
     retryCount: 0
   });
 
-  // Fetch pricing data
-  const fetchPricing = useCallback(async (forceRefresh = false) => {
-    if (state.loading && !forceRefresh) return;
-
-    setState(prev => ({
-      ...prev,
-      loading: true,
-      error: null
-    }));
+  const fetchPricing = useCallback(async (specificVersion = null) => {
+    console.log('[usePricing] fetchPricing called', { specificVersion });
+    
+    setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const result = await apiService.getPricing();
+      console.log('[usePricing] Calling apiService.getPricing...');
       
-      setState(prev => ({
-        ...prev,
+      const endpoint = specificVersion ? `/pricing/version/${specificVersion}` : '/pricing';
+      const result = await apiService.getPricing({ url: endpoint });
+      
+      console.log('[usePricing] Got result:', result);
+      
+      setState({
         data: result.data,
         version: result.data.routing.version,
         loading: false,
         error: null,
-        lastFetch: new Date(),
         retryCount: 0
-      }));
-
+      });
+      
       return result.data;
     } catch (error) {
-      console.error('Error fetching pricing:', error);
+      console.error('[usePricing] Error:', error);
+      
+      const shouldRetry = retryOnError && state.retryCount < maxRetries;
       
       setState(prev => ({
         ...prev,
@@ -57,138 +45,83 @@ const usePricing = (options = {}) => {
         error: {
           message: error.error || 'Failed to load pricing data',
           status: error.status,
-          isNetworkError: error.isNetworkError,
-          timestamp: new Date()
+          isNetworkError: error.isNetworkError || false
         },
         retryCount: prev.retryCount + 1
       }));
 
-      // Auto-retry on network errors
-      if (retryOnError && 
-          error.isNetworkError && 
-          state.retryCount < maxRetries) {
-        console.log(`Retrying in 2 seconds... (${state.retryCount + 1}/${maxRetries})`);
-        setTimeout(() => fetchPricing(true), 2000);
+      // Auto-retry if enabled
+      if (shouldRetry) {
+        console.log(`[usePricing] Retrying... (${state.retryCount + 1}/${maxRetries})`);
+        setTimeout(() => fetchPricing(specificVersion), 2000 * (state.retryCount + 1));
       }
-
-      throw error;
-    }
-  }, [state.loading, state.retryCount, retryOnError, maxRetries]);
-
-  // Fetch specific version for testing
-  const fetchSpecificVersion = useCallback(async (version) => {
-    setState(prev => ({
-      ...prev,
-      loading: true,
-      error: null
-    }));
-
-    try {
-      const result = await apiService.getSpecificVersion(version);
       
-      setState(prev => ({
-        ...prev,
-        data: result.data,
-        version: result.data.routing.version,
-        loading: false,
-        error: null,
-        lastFetch: new Date()
-      }));
-
-      return result.data;
-    } catch (error) {
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: {
-          message: error.error || `Failed to load ${version} pricing`,
-          status: error.status,
-          timestamp: new Date()
-        }
-      }));
       throw error;
     }
-  }, []);
+  }, [retryOnError, maxRetries, state.retryCount]);
 
-  // Refresh data
-  const refresh = useCallback(() => {
-    return fetchPricing(true);
+  const fetchSpecificVersion = useCallback(async (version) => {
+    if (!version || !['blue', 'green'].includes(version)) {
+      console.error('[usePricing] Invalid version:', version);
+      return;
+    }
+    return fetchPricing(version);
   }, [fetchPricing]);
 
-  // Clear error
-  const clearError = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      error: null
-    }));
-  }, []);
+  const refresh = useCallback(() => {
+    console.log('[usePricing] Refreshing data...');
+    setState(prev => ({ ...prev, retryCount: 0 }));
+    return fetchPricing();
+  }, [fetchPricing]);
 
-  // Reset state
-  const reset = useCallback(() => {
-    setState({
-      data: null,
-      loading: true,
-      error: null,
-      version: null,
-      lastFetch: null,
-      retryCount: 0
-    });
+  const clearError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null, retryCount: 0 }));
   }, []);
 
   // Initial fetch
   useEffect(() => {
+    console.log('[usePricing] useEffect triggered, autoFetch:', autoFetch);
     if (autoFetch) {
       fetchPricing();
     }
-  }, [autoFetch]); // Only run on mount or when autoFetch changes
+  }, [autoFetch, fetchPricing]);
 
-  // Set up refresh interval
+  // Auto-refresh interval
   useEffect(() => {
     if (!refreshInterval || refreshInterval <= 0) return;
 
-    const interval = setInterval(() => {
-      if (!state.loading) {
-        fetchPricing(true);
-      }
+    console.log('[usePricing] Setting up refresh interval:', refreshInterval);
+    const intervalId = setInterval(() => {
+      console.log('[usePricing] Auto-refreshing...');
+      fetchPricing();
     }, refreshInterval);
 
-    return () => clearInterval(interval);
-  }, [refreshInterval, state.loading, fetchPricing]);
-
-  // Derived state
-  const isBlueVersion = state.version === 'blue';
-  const isGreenVersion = state.version === 'green';
-  const hasData = !!state.data;
-  const canRetry = state.error && state.retryCount < maxRetries;
+    return () => {
+      console.log('[usePricing] Clearing refresh interval');
+      clearInterval(intervalId);
+    };
+  }, [refreshInterval, fetchPricing]);
 
   return {
     // Data
     data: state.data,
     plans: state.data?.plans || [],
     version: state.version,
+    routing: state.data?.routing,
+    metadata: state.data?.metadata,
     
-    // Status
+    // State flags
     loading: state.loading,
     error: state.error,
-    hasData,
-    isBlueVersion,
-    isGreenVersion,
+    hasData: !!state.data,
+    isBlueVersion: state.version === 'blue',
+    isGreenVersion: state.version === 'green',
     
-    // Metadata
-    lastFetch: state.lastFetch,
-    retryCount: state.retryCount,
-    canRetry,
-    
-    // Methods
+    // Actions
     fetchPricing,
     fetchSpecificVersion,
     refresh,
-    clearError,
-    reset,
-    
-    // Routing info
-    routing: state.data?.routing,
-    metadata: state.data?.metadata
+    clearError
   };
 };
 

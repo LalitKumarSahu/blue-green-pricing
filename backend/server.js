@@ -1,9 +1,9 @@
 import express from 'express';
+import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import config from './src/config/index.js';
 import pricingRoutes from './src/routes/pricingRoutes.js';
-import { corsMiddleware, customCorsMiddleware, handlePreflightRequest } from './src/middleware/cors.js';
 import { requestLogger, pricingLogger, errorLogger } from './src/middleware/logger.js';
 import { getMemoryUsage } from './src/utils/helpers.js';
 
@@ -12,9 +12,51 @@ const app = express();
 // Trust proxy for accurate IP addresses
 app.set('trust proxy', true);
 
-// Security middleware
+// CORS - MUST BE FIRST (before any other middleware)
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:5173', // Vite default port
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5173'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || config.server.env === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-Request-ID',
+    'X-Version',
+    'Accept',
+    'Origin'
+  ],
+  exposedHeaders: ['Content-Length', 'X-Request-ID', 'X-Version-Served'],
+  maxAge: 86400, // 24 hours
+  optionsSuccessStatus: 200
+};
+
+// Apply CORS
+app.use(cors(corsOptions));
+
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions));
+
+// Security middleware (after CORS)
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -25,21 +67,10 @@ app.use(helmet({
   },
 }));
 
-// CORS handling
-app.use(handlePreflightRequest);
-app.use(corsMiddleware);
-app.use(customCorsMiddleware);
-
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-
-// Logging middleware
-if (config.logging.enableRequestLogging) {
-  app.use(requestLogger);
-}
-app.use(pricingLogger);
 
 // Request ID middleware
 app.use((req, res, next) => {
@@ -47,6 +78,12 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-ID', req.requestId);
   next();
 });
+
+// Logging middleware
+if (config.logging.enableRequestLogging) {
+  app.use(requestLogger);
+}
+app.use(pricingLogger);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -136,18 +173,19 @@ const gracefulShutdown = (signal) => {
 
 // Start server
 const server = app.listen(config.server.port, () => {
+  console.log('\n==========================================');
   console.log('🚀 Blue-Green Pricing API Server Started');
+  console.log('==========================================');
   console.log(`📍 Environment: ${config.server.env}`);
-  console.log(`🌐 Server running on port: ${config.server.port}`);
-  console.log(`🔗 Base URL: http://localhost:${config.server.port}`);
-  console.log(`📊 Health Check: http://localhost:${config.server.port}/pricing/health`);
+  console.log(`🌐 Server: http://localhost:${config.server.port}`);
+  console.log(`📊 Health: http://localhost:${config.server.port}/pricing/health`);
   console.log(`📈 Stats: http://localhost:${config.server.port}/pricing/stats`);
-  console.log(`⚙️  System Info: http://localhost:${config.server.port}/system`);
-  console.log('');
-  console.log('🎯 Routing Configuration:');
-  console.log(`   Blue/Green Split: ${config.routing.percentage.blue}%/${config.routing.percentage.green}%`);
-  console.log(`   Enabled Rules: ${Object.keys(config.routing).filter(key => config.routing[key]?.enabled).join(', ')}`);
-  console.log('');
+  console.log(`⚙️  System: http://localhost:${config.server.port}/system`);
+  console.log('\n🎯 Routing Configuration:');
+  console.log(`   Split: ${config.routing.percentage.blue}%/${config.routing.percentage.green}%`);
+  console.log(`   Rules: ${Object.keys(config.routing).filter(key => config.routing[key]?.enabled).join(', ')}`);
+  console.log('\n✅ Server ready to accept connections');
+  console.log('==========================================\n');
 });
 
 // Handle shutdown signals
