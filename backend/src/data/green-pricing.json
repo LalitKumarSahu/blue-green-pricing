@@ -1,0 +1,73 @@
+{
+  "version": "green",
+  "title": "New Pricing Plans",
+  "subtitle": "Better value, more features",
+  "plans": [
+    {
+      "id": "basic",
+      "name": "Basic",
+      "price": 7.99,
+      "currency": "USD",
+      "billing": "monthly",
+      "popular": false,
+      "description": "Great for personal use",
+      "features": [
+        "Up to 3 projects",
+        "5GB storage",
+        "Community support",
+        "Basic dashboard",
+        "Mobile app"
+      ],
+      "buttonText": "Start Basic",
+      "color": "green"
+    },
+    {
+      "id": "premium",
+      "name": "Premium",
+      "price": 24.99,
+      "currency": "USD",
+      "billing": "monthly",
+      "popular": true,
+      "description": "Best value for professionals",
+      "features": [
+        "Unlimited projects",
+        "50GB storage",
+        "Live chat support",
+        "Advanced reporting",
+        "Team features",
+        "API access",
+        "Webhook support",
+        "Custom branding"
+      ],
+      "buttonText": "Go Premium",
+      "color": "emerald"
+    },
+    {
+      "id": "business",
+      "name": "Business",
+      "price": 79.99,
+      "currency": "USD",
+      "billing": "monthly",
+      "popular": false,
+      "description": "Comprehensive solution for teams",
+      "features": [
+        "Everything in Premium",
+        "500GB storage",
+        "Phone support",
+        "Custom analytics",
+        "SSO integration",
+        "Priority processing",
+        "White-label options",
+        "Advanced permissions",
+        "Audit logs"
+      ],
+      "buttonText": "Choose Business",
+      "color": "blue"
+    }
+  ],
+  "metadata": {
+    "lastUpdated": "2024-01-20",
+    "region": "US", 
+    "currency": "USD"
+  }
+}

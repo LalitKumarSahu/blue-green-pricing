@@ -1,0 +1,71 @@
+{
+  "version": "blue",
+  "title": "Choose Your Plan",
+  "subtitle": "Select the perfect plan for your needs",
+  "plans": [
+    {
+      "id": "starter",
+      "name": "Starter",
+      "price": 9.99,
+      "currency": "USD",
+      "billing": "monthly",
+      "popular": false,
+      "description": "Perfect for individuals getting started",
+      "features": [
+        "Up to 5 projects",
+        "10GB storage",
+        "Email support",
+        "Basic analytics",
+        "Mobile app access"
+      ],
+      "buttonText": "Get Started",
+      "color": "blue"
+    },
+    {
+      "id": "professional",
+      "name": "Professional",
+      "price": 29.99,
+      "currency": "USD",
+      "billing": "monthly",
+      "popular": true,
+      "description": "Ideal for growing businesses",
+      "features": [
+        "Unlimited projects",
+        "100GB storage",
+        "Priority support",
+        "Advanced analytics",
+        "Team collaboration",
+        "API access",
+        "Custom integrations"
+      ],
+      "buttonText": "Go Professional",
+      "color": "purple"
+    },
+    {
+      "id": "enterprise",
+      "name": "Enterprise",
+      "price": 99.99,
+      "currency": "USD",
+      "billing": "monthly",
+      "popular": false,
+      "description": "For large organizations with advanced needs",
+      "features": [
+        "Unlimited everything",
+        "1TB storage",
+        "24/7 phone support",
+        "Custom analytics",
+        "Advanced security",
+        "Dedicated account manager",
+        "On-premise deployment",
+        "SLA guarantee"
+      ],
+      "buttonText": "Contact Sales",
+      "color": "gold"
+    }
+  ],
+  "metadata": {
+    "lastUpdated": "2024-01-15",
+    "region": "US",
+    "currency": "USD"
+  }
+}
